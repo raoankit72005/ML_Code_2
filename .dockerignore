@@ -1,0 +1,12 @@
+.git
+**/__pycache__
+*.zip
+*.tsv
+*.tsv.gz
+*.sqlite*
+*.parquet
+work*
+data
+output
+*.pt
+*.f16

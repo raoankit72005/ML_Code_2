@@ -1,0 +1,13 @@
+{
+  "hash_bits": 18,
+  "validation_fraction": 0.2,
+  "seed": 42,
+  "block_limit": 100,
+  "lexical_pool": 120,
+  "lexical_top_k": 25,
+  "max_candidates": 80,
+  "query_terms": 16,
+  "row_group_size": 10000,
+  "sqlite_cache_mb": 128,
+  "progress_every": 10000
+}

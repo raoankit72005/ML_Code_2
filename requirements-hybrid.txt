@@ -1,0 +1,14 @@
+-r requirements.txt
+sentence-transformers==5.1.2
+transformers==4.55.4
+peft==0.17.1
+faiss-cpu==1.12.0
+tensorboard==2.20.0
+psutil==7.0.0
+torch==2.8.0
+accelerate==1.15.0
+huggingface-hub==0.36.2
+tokenizers==0.21.4
+safetensors==0.8.0
+tqdm==4.70.1
+sentencepiece==0.2.1

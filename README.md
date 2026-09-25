@@ -99,4 +99,4 @@ Final candidate_pairs.tsv contains exactly the candidates scored by the matcher,
 python -m unittest discover -s tests -v
 ```
 
-See docs/TESTING.md for verified and unverified scope. Configuration files are under configs/. Do not install notebook dependencies over a running job. GPU smoke checks run at job start; CPU integration tests cannot establish NCCL/CUDA throughput or full-scale memory safety.
+See docs/TESTING.md for verified and unverified scope. Configuration files are under configs/. Do not install notebook dependencies over a running job. Four-rank NCCL communication, CUDA LightGBM, and encoder smoke checks run at job start; CPU integration tests cannot establish NCCL/CUDA throughput or full-scale memory safety.
