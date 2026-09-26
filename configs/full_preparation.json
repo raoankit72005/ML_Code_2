@@ -9,7 +9,9 @@
   "query_terms": 16,
   "row_group_size": 10000,
   "sqlite_cache_mb": 256,
-  "progress_every": 10000,
+  "progress_every": 250,
+  "blocking_workers": 16,
+  "blocking_chunk_queries": 2000,
   "india_retrieval_multiplier": 1,
   "word_retrieval": 1,
   "diverse_candidates": 8
