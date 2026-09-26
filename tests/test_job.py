@@ -20,6 +20,13 @@ class JobTests(unittest.TestCase):
         self.assertEqual(r['CheckpointConfig']['LocalPath'],'/opt/ml/checkpoints')
         self.assertFalse(r['EnableManagedSpotTraining'])
         self.assertIn('test-job',r['OutputDataConfig']['S3OutputPath'])
+        args.profile='g5';args.image='example/image:sm86-test'
+        small=m.request(args)
+        self.assertEqual(small['ResourceConfig']['InstanceType'],'ml.g5.xlarge')
+        self.assertEqual(small['Environment']['ER_PROFILE'],'g5')
+        args.image='example/image:sm89-test'
+        with self.assertRaises(ValueError):m.request(args)
+        args.image='example/image:sm86-test'
         args.name='bad name'
         with self.assertRaises(ValueError):m.request(args)
 
