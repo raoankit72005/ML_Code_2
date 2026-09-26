@@ -121,7 +121,7 @@ def main():
         elif action=='retrieve':
             from er_pipeline.neural import retrieve
             retrieve(folder,work,cfg)
-        elif action=='block':blocking.generate(folder,tfidf,prep)
+        elif action=='block':blocking.generate_parallel(folder,tfidf,prep)
         elif action=='label':labeling.label(folder,find_truth(cleaned),prep)
         elif action=='features':features.extract(folder,tfidf,split,prep)
         elif action=='export':tables.export(folder,split,prep)
