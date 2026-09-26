@@ -12,6 +12,8 @@ python sagemaker/launch.py --profile g5 \
 ```
 
 The launcher prints a dry run. Paid training starts only with `--submit`.
+The G5 profile requests 200 GB of its fixed 250 GB local NVMe storage by
+default; `--volume-gb` cannot expand it beyond 250 GB.
 This profile uses one GPU for the LoRA encoder and embedding passes, two CPU
 blocking workers, reduced retrieval budgets, and CPU LightGBM on at most
 300,000 training and 50,000 early-stopping candidate pairs. All generated
