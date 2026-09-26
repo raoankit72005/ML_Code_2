@@ -48,5 +48,5 @@ def build(index_path, truth_path, destination, fraction=.2, seed=42):
         digest=hashlib.blake2b(f'{seed}|{cluster}'.encode(),digest_size=8).hexdigest()
         split='validation' if int(digest,16)/2**64<fraction else 'train'
         conn.execute('UPDATE queries SET cluster=?,split=?,shuffle=? WHERE sid=?',(cluster,split,digest,sid))
-    conn.executescript('CREATE INDEX pair_order ON pairs(ordinal,sid); CREATE INDEX query_split ON queries(split,country,shuffle);')
+    conn.executescript('CREATE INDEX pair_order ON pairs(ordinal,sid); CREATE INDEX pair_sid ON pairs(sid,ordinal,eid); CREATE INDEX query_split ON queries(split,country,shuffle);')
     conn.commit();refs.close();conn.close()
