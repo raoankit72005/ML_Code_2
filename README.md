@@ -76,7 +76,8 @@ Use a separate terminal for TensorBoard. Do not start a second pipeline on the s
 
 ## Memory and storage behavior
 
-- 256 MiB SQLite caches, disk-backed tables, bounded Parquet groups and resource-aware LightGBM loading.
+- Blocking uses 16 CPU processes by default. Each reads the shared SQLite index and writes an ordered 2,000-query chunk under `blocking_chunks/`. Completed chunks are reused when the same work volume is preserved; incomplete chunks restart. The final merge writes one ordered query TSV and candidate Parquet for downstream stages. Plan disk capacity for both the chunks and the merged output. The number of workers does not imply a linear speedup: benchmark query throughput on the target dataset before committing to a full paid run.
+- 256 MiB SQLite caches per blocking worker, disk-backed tables, bounded Parquet groups and resource-aware LightGBM loading.
 - One encoder replica per GPU; BF16 where supported, cached contrastive activation batches, synchronised OOM retries reducing activation size on all ranks. Tokenisation failures or irreducible OOM still fail with the last checkpoint retained.
 - Embedding inference halves batches on CUDA OOM. Shards resume at committed row boundaries. Final merging uses a 16 MiB buffer and temporarily requires a second copy of the embedding data; shards are removed only after publication.
 - 10 million 768-dimensional float16 embeddings consume 15.36 GB before indexes/features; feature tables and training staging can be much larger than raw data. Keep at least the configured 20 GiB disk reserve. Individual stages have additional disk guards.
