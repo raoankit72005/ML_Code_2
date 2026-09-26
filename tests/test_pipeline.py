@@ -10,7 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 from er_pipeline.common import DEFAULTS, rows, parquet_rows, split_for
 from er_pipeline.indexing import build, FIELDS
-from er_pipeline.blocking import generate
+from er_pipeline.blocking import generate, generate_parallel
 from er_pipeline.labeling import label
 from er_pipeline.features import extract, pair_features
 from er_pipeline.tables import export
@@ -108,6 +108,32 @@ class Tests(unittest.TestCase):
             # Missing score rows must never silently become negative predictions.
             write_tsv(probabilities,['source1_entity_id','candidate_entity_id','match_probability'],[])
             with self.assertRaises(ValueError):evaluate(work,probabilities,[0.5])
+
+    def test_parallel_blocking_preserves_order_and_resume(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d); data=root/'data'; data.mkdir(); work=root/'work'; work.mkdir()
+            cfg=dict(DEFAULTS, hash_bits=12, blocking_workers=2, blocking_chunk_queries=2,
+                     progress_every=1)
+            queries=[record(f'S1-{i}', 'abc motors', 'elm street') for i in range(5)]
+            refs=[record('S2-a', 'abc motors', 'elm street')]
+            for n, values in [(1,queries),(2,refs),(3,[record('S3-a','other')])]:
+                write_tsv(data/f'train_source{n}.tsv',FIELDS,values)
+            build(data,work,'train',cfg)
+            generate(work,work/'tfidf.npz',cfg)
+            expected_queries=list(rows(work/'queries.tsv.gz'))
+            expected_pairs=list(parquet_rows(work/'candidate_pairs.parquet'))
+            expected_report=json.loads((work/'blocking_report.json').read_text())
+            generate_parallel(work,work/'tfidf.npz',cfg)
+            self.assertEqual(list(rows(work/'queries.tsv.gz')),expected_queries)
+            def stable_pairs():
+                return [{k: ('NaN' if isinstance(v,float) and math.isnan(v) else v)
+                         for k,v in row.items()} for row in parquet_rows(work/'candidate_pairs.parquet')]
+            expected_pairs=[{k: ('NaN' if isinstance(v,float) and math.isnan(v) else v)
+                             for k,v in row.items()} for row in expected_pairs]
+            self.assertEqual(stable_pairs(),expected_pairs)
+            self.assertEqual(json.loads((work/'blocking_report.json').read_text()),expected_report)
+            generate_parallel(work,work/'tfidf.npz',cfg)
+            self.assertEqual(stable_pairs(),expected_pairs)
 
 
 if __name__=='__main__':
