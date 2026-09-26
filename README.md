@@ -1,5 +1,29 @@
 # ML_Code_2: multi-GPU entity resolution on SageMaker Training Jobs
 
+## One-GPU G5 baseline (experimental)
+
+For `ml.g5.xlarge` (one A10G, 4 vCPUs, 16 GiB host RAM), build a **new** SM86 image:
+
+```bash
+CUDA_ARCH=86 bash sagemaker/build_push.sh
+python sagemaker/launch.py --profile g5 \
+  --role YOUR_ROLE_ARN --image YOUR_SM86_IMAGE_URI \
+  --input s3://YOUR_BUCKET/ML_dataset.zip --output s3://YOUR_BUCKET/phase3-output
+```
+
+The launcher prints a dry run. Paid training starts only with `--submit`.
+This profile uses one GPU for the LoRA encoder and embedding passes, two CPU
+blocking workers, reduced retrieval budgets, and CPU LightGBM on at most
+300,000 training and 50,000 early-stopping candidate pairs. All generated
+candidate pairs are scored for final holdout and test outputs; the matcher
+training sample and smaller retrieval budgets can lower recall/accuracy.
+It still reads and indexes the full input dataset. With millions of rows,
+CPU retrieval, disk usage, and end-to-end runtime on 4 vCPUs/16 GiB have **not**
+been validated. A 24-hour maximum may stop the job before it produces a model.
+Completed blocking chunks resume only if the entire work directory persists;
+S3 encoder checkpoints alone cannot restart a new SageMaker job at blocking.
+Benchmark on a representative subset before paying for a full-data run.
+
 Streaming TSV cleaning and entity-cluster split → shared multilingual Siamese encoder → disk-backed embeddings → country/source IVF-PQ plus lexical blocking → merged candidates → string/address/retrieval/cosine features → CUDA LightGBM → full-validation macro F0.5 threshold → complete test matching results.
 
 This is a separate project. It does not change ML_Code_1 or ML-code. The original dataset is used; no query or training-pair downsampling is enabled. A cluster-based holdout is reserved for validation. Retrieval shortlists and the final candidate cap are intentional approximations, not dataset sampling.

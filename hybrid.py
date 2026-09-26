@@ -37,7 +37,8 @@ def main():
         raise ValueError('Need contrastive batch >=2 and ANN shortlist >= top k')
     from er_pipeline.modeling import file_identity,sha256,load_config
     traincfg=load_config(args.training_config)
-    if not traincfg['full_data']:raise ValueError('Hybrid pipeline requires full_data=true; no implicit pair sampling')
+    if not traincfg['full_data']:
+        print('Explicit capped matcher training profile: all queries are retrieved and scored; only matcher fit rows are capped.',flush=True)
     files=[args.input] if args.input.is_file() else sorted(args.input.rglob('*.tsv'))
     digest=hashlib.sha256()
     for p in sorted((ROOT/'src').rglob('*.py'))+[ROOT/'hybrid.py',ROOT/'gpu_worker.py',ROOT/'clean_er_data.py']:digest.update(p.read_bytes())

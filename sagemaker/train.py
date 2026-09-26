@@ -53,6 +53,12 @@ def main():
     enc=checkpoint/'encoder';enc.mkdir(exist_ok=True)
     if not (work/'encoder').exists():(work/'encoder').symlink_to(enc,target_is_directory=True)
     command=[sys.executable,'-u',str(ROOT/'hybrid.py'),'--input',str(data),'--work',str(work)]
+    profile=os.environ.get('ER_PROFILE','g6e')
+    if profile=='g5':
+        command+=['--config',str(ROOT/'configs/g5_hybrid.json'),
+                  '--preparation-config',str(ROOT/'configs/g5_preparation.json'),
+                  '--training-config',str(ROOT/'configs/g5_matcher.json')]
+    elif profile!='g6e':raise ValueError('Unknown ER_PROFILE')
     print('Launching: '+' '.join(command),flush=True)
     child=subprocess.Popen(command,cwd=ROOT,start_new_session=True)
     def stop(signum,frame):
