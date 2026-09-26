@@ -20,10 +20,14 @@ class JobTests(unittest.TestCase):
         self.assertEqual(r['CheckpointConfig']['LocalPath'],'/opt/ml/checkpoints')
         self.assertFalse(r['EnableManagedSpotTraining'])
         self.assertIn('test-job',r['OutputDataConfig']['S3OutputPath'])
-        args.profile='g5';args.image='example/image:sm86-test'
+        args.profile='g5';args.image='example/image:sm86-test';args.volume_gb=None
         small=m.request(args)
         self.assertEqual(small['ResourceConfig']['InstanceType'],'ml.g5.xlarge')
         self.assertEqual(small['Environment']['ER_PROFILE'],'g5')
+        self.assertEqual(m.request(args)['ResourceConfig']['VolumeSizeInGB'],200)
+        args.volume_gb=1000
+        with self.assertRaises(ValueError):m.request(args)
+        args.volume_gb=200
         args.image='example/image:sm89-test'
         with self.assertRaises(ValueError):m.request(args)
         args.image='example/image:sm86-test'
