@@ -15,6 +15,10 @@ def request(args):
         raise ValueError('G5 requires an SM86 image built with CUDA_ARCH=86')
     if profile=='g6e' and ':sm86-' in args.image:
         raise ValueError('SM86 image cannot be used with G6e')
+    volume = getattr(args, 'volume_gb', None)
+    volume = (200 if profile == 'g5' else 1000) if volume is None else volume
+    if volume < 1 or (profile == 'g5' and volume > 250):
+        raise ValueError('G5 volume must be 1-250 GB; its local NVMe storage cannot be expanded with this flag')
     prefix=args.output.rstrip('/')+'/'+args.name
     return dict(TrainingJobName=args.name,RoleArn=args.role,
         AlgorithmSpecification=dict(TrainingImage=args.image,TrainingInputMode='File',
@@ -24,7 +28,7 @@ def request(args):
             S3DataType='S3Prefix',S3Uri=args.input,S3DataDistributionType='FullyReplicated')))],
         OutputDataConfig=dict(S3OutputPath=prefix+'/artifacts'),
         CheckpointConfig=dict(S3Uri=prefix+'/checkpoints',LocalPath='/opt/ml/checkpoints'),
-        ResourceConfig=dict(InstanceType='ml.g5.xlarge' if profile=='g5' else 'ml.g6e.12xlarge',InstanceCount=1,VolumeSizeInGB=args.volume_gb),
+        ResourceConfig=dict(InstanceType='ml.g5.xlarge' if profile=='g5' else 'ml.g6e.12xlarge',InstanceCount=1,VolumeSizeInGB=volume),
         StoppingCondition=dict(MaxRuntimeInSeconds=args.max_hours*3600),
         EnableManagedSpotTraining=False,EnableNetworkIsolation=False,
         Environment=dict(PYTHONUNBUFFERED='1',TOKENIZERS_PARALLELISM='false',OMP_NUM_THREADS='2' if profile=='g5' else '8',MKL_NUM_THREADS='2' if profile=='g5' else '8',ER_PROFILE=profile))
@@ -36,9 +40,9 @@ def main():
     p.add_argument('--input',default='s3://ml-hack1/ML_dataset.zip');p.add_argument('--output',required=True)
     p.add_argument('--region',default='us-east-1');p.add_argument('--name',default='ml-code-2-'+datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S'))
     p.add_argument('--profile',choices=('g6e','g5'),default='g6e')
-    p.add_argument('--volume-gb',type=int,default=1000);p.add_argument('--max-hours',type=int,default=24)
+    p.add_argument('--volume-gb',type=int,default=None);p.add_argument('--max-hours',type=int,default=24)
     p.add_argument('--submit',action='store_true');a=p.parse_args()
-    if a.volume_gb<1 or a.max_hours<1:p.error('Volume and max-hours must be positive')
+    if (a.volume_gb is not None and a.volume_gb<1) or a.max_hours<1:p.error('Volume and max-hours must be positive')
     payload=request(a);print(json.dumps(payload,indent=2))
     if a.submit:
         import boto3
