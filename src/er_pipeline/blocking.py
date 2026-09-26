@@ -2,14 +2,17 @@
 import csv
 import json
 import math
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from collections import Counter
 from functools import lru_cache
+from pathlib import Path
 
-from .common import connect, ParquetSink, PAIR_SCHEMA, dump_json, open_text
+from .common import connect, ParquetSink, PAIR_SCHEMA, dump_json, open_text, parquet_rows
 from .text_features import Tfidf, name_text, address_text, cosine, block_keys, encoded
 
 
-def generate(work, tfidf_path, config, max_queries=None):
+def generate(work, tfidf_path, config, max_queries=None, rid_range=None):
     conn = connect(work / 'index.sqlite', config['sqlite_cache_mb'], readonly=True)
     neural=connect(work/'neural.sqlite',readonly=True) if (work/'neural.sqlite').exists() else None
     tfidf = Tfidf.load(tfidf_path)
@@ -31,8 +34,12 @@ def generate(work, tfidf_path, config, max_queries=None):
         writer = csv.DictWriter(qfile, fieldnames=['source1_entity_id', 'country', 'n_candidates',
             'union_candidates', 'overflow_blocks'], delimiter='\t')
         writer.writeheader()
-        query_sql = 'SELECT payload FROM records WHERE source=1 ORDER BY rid'
-        cursor = conn.execute(query_sql)
+        query_sql = 'SELECT payload FROM records WHERE source=1'
+        parameters = ()
+        if rid_range is not None:
+            query_sql += ' AND rid>=? AND rid<?'
+            parameters = rid_range
+        cursor = conn.execute(query_sql + ' ORDER BY rid', parameters)
         for index, (payload,) in enumerate(cursor):
             if max_queries is not None and index >= max_queries:
                 break
@@ -134,6 +141,68 @@ def generate(work, tfidf_path, config, max_queries=None):
     dump_json(work / 'blocking_report.json', dict(totals))
     conn.close()
     if neural:neural.close()
+    print(f'Blocking complete: {totals["queries"]:,} queries / {totals["pairs"]:,} pairs', flush=True)
+
+
+def _chunk(index, start, end, work, tfidf_path, config):
+    folder = work / 'blocking_chunks' / f'{index:06d}'
+    folder.mkdir(parents=True, exist_ok=True)
+    for filename in ('index.sqlite', 'neural.sqlite'):
+        source = work / filename
+        target = folder / filename
+        if source.exists() and not target.exists():
+            target.symlink_to(source.resolve())
+    report = folder / 'blocking_report.json'
+    if not all((folder / name).exists() for name in ('queries.tsv.gz', 'candidate_pairs.parquet', 'blocking_report.json')):
+        generate(folder, tfidf_path, config, rid_range=(start, end))
+    return index, json.loads(report.read_text())
+
+
+def generate_parallel(work, tfidf_path, config):
+    """Process ordered query ranges; published chunks survive interrupted runs."""
+    work = Path(work)
+    workers = int(config.get('blocking_workers', 1))
+    if workers < 1:
+        raise ValueError('blocking_workers must be positive')
+    if workers == 1:
+        return generate(work, tfidf_path, config)
+    chunk_size = int(config.get('blocking_chunk_queries', 10000))
+    if chunk_size < 1:
+        raise ValueError('blocking_chunk_queries must be positive')
+    conn = connect(work / 'index.sqlite', readonly=True)
+    lo, hi = conn.execute('SELECT MIN(rid),MAX(rid) FROM records WHERE source=1').fetchone()
+    conn.close()
+    if lo is None:
+        raise ValueError('No source 1 queries')
+    ranges = [(i, start, min(start + chunk_size, hi + 1))
+              for i, start in enumerate(range(lo, hi + 1, chunk_size))]
+    totals = Counter()
+    reports = {}
+    with ProcessPoolExecutor(max_workers=workers, mp_context=multiprocessing.get_context('spawn')) as pool:
+        futures = [pool.submit(_chunk, i, start, end, work, tfidf_path, config)
+                   for i, start, end in ranges]
+        for future in as_completed(futures):
+            i, report = future.result()
+            reports[i] = report
+            print(f'blocking: completed {len(reports)}/{len(ranges)} chunks; '
+                  f'{sum(r["queries"] for r in reports.values()):,} queries', flush=True)
+    qpath = work / 'queries.partial.tsv.gz'
+    with open_text(qpath, 'wt') as output, ParquetSink(work / 'candidate_pairs.parquet', PAIR_SCHEMA, config['row_group_size']) as sink:
+        for i, _, _ in ranges:
+            folder = work / 'blocking_chunks' / f'{i:06d}'
+            with open_text(folder / 'queries.tsv.gz') as source:
+                header = next(source)
+                if i == 0:
+                    output.write(header)
+                for line in source:
+                    output.write(line)
+            for row in parquet_rows(folder / 'candidate_pairs.parquet'):
+                sink.append(row)
+            totals.update({key: value for key, value in reports[i].items()
+                           if key != 'average_candidates'})
+    qpath.replace(work / 'queries.tsv.gz')
+    totals['average_candidates'] = totals['pairs'] / max(1, totals['queries'])
+    dump_json(work / 'blocking_report.json', dict(totals))
     print(f'Blocking complete: {totals["queries"]:,} queries / {totals["pairs"]:,} pairs', flush=True)
 
 
